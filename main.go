@@ -2,19 +2,25 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
-)
 
-type config struct {
-	commands map[string]cliCommand
-}
+	"github.com/mariolazzari/pokedex/internal/models"
+)
 
 type cliCommand struct {
 	name        string
 	description string
 	callback    func(*config) error
+}
+
+type config struct {
+	commands       map[string]cliCommand
+	locationLimit  int
+	locationOffset int
 }
 
 func commandExit(cfg *config) error {
@@ -29,6 +35,64 @@ Usage:
 
 help: Displays a help message
 exit: Exit the Pokedex`)
+
+	return nil
+}
+
+func getLocations(cfg *config) ([]models.Location, error) {
+	url := fmt.Sprintf(
+		"https://pokeapi.co/api/v2/location-area?limit=%d&offset=%d",
+		cfg.locationLimit,
+		cfg.locationOffset,
+	)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var body LocationResponse
+
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	return body.Results, nil
+}
+
+func mapHelp(cfg *config) error {
+	fmt.Println("Show next 20 locations")
+
+	locations, err := getLocations(cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, location := range locations {
+		fmt.Println(location.Name)
+	}
+
+	cfg.locationOffset += cfg.locationLimit
+
+	return nil
+}
+
+func mapbHelp(cfg *config) error {
+	fmt.Println("Show previous 20 locations")
+
+	if cfg.locationOffset > 0 {
+		cfg.locationOffset -= cfg.locationLimit
+	}
+
+	locations, err := getLocations(cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, location := range locations {
+		fmt.Println(location.Name)
+	}
 
 	return nil
 }
@@ -76,7 +140,10 @@ func startRepl(cfg *config) {
 }
 
 func main() {
-	cfg := &config{}
+	cfg := &config{
+		locationLimit:  20,
+		locationOffset: 0,
+	}
 
 	cfg.commands = map[string]cliCommand{
 		"exit": {
@@ -88,6 +155,16 @@ func main() {
 			name:        "help",
 			description: "Pokedex help",
 			callback:    commandHelp,
+		},
+		"map": {
+			name:        "map",
+			description: "display the next 20 locations",
+			callback:    mapHelp,
+		},
+		"mapb": {
+			name:        "mapb",
+			description: "display the previous 20 locations",
+			callback:    mapbHelp,
 		},
 	}
 
