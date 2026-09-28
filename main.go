@@ -40,20 +40,22 @@ exit: Exit the Pokedex`)
 }
 
 func getLocations(cfg *config) ([]models.Location, error) {
+	// endpoint
 	url := fmt.Sprintf(
 		"https://pokeapi.co/api/v2/location-area?limit=%d&offset=%d",
 		cfg.locationLimit,
 		cfg.locationOffset,
 	)
 
+	// api call
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var body LocationResponse
-
+	// body parser
+	var body models.LocationResponse
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, err
 	}
