@@ -25,6 +25,7 @@ type config struct {
 	location       string
 	catch          string
 	pokemons       map[string]models.Pokemon
+	inspect        string
 }
 
 func commandExit(cfg *config) error {
@@ -142,12 +143,7 @@ func mapbHelp(cfg *config) error {
 	return nil
 }
 
-func catchHelp(cfg *config) error {
-	if cfg.catch == "" {
-		return fmt.Errorf("Please enter a Pokemon name")
-	}
-
-	fmt.Printf("Throwing a Pokeball at %s...\n", cfg.catch)
+func getPokemon(cfg *config) (models.Pokemon, error) {
 
 	url := fmt.Sprintf(
 		"https://pokeapi.co/api/v2/pokemon/%s",
@@ -156,30 +152,74 @@ func catchHelp(cfg *config) error {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		return models.Pokemon{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("pokemon %q not found", cfg.catch)
+		return models.Pokemon{}, fmt.Errorf("pokemon %q not found", cfg.catch)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("PokeAPI returned status %s", resp.Status)
+		return models.Pokemon{}, fmt.Errorf("PokeAPI returned status %s", resp.Status)
 	}
 
 	var body models.Pokemon
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return models.Pokemon{}, err
+	}
+
+	return body, nil
+}
+
+func catchHelp(cfg *config) error {
+	if cfg.catch == "" {
+		return fmt.Errorf("Please enter a Pokemon name")
+	}
+
+	fmt.Printf("Throwing a Pokeball at %s...\n", cfg.catch)
+
+	body, err := getPokemon(cfg)
+	if err != nil {
 		return err
 	}
 
 	chance := rand.IntN(1000)
 	if chance > body.BaseExperience {
 		cfg.pokemons[cfg.catch] = body
+		fmt.Printf("%s was caught!\n", cfg.catch)
+	} else {
+		fmt.Printf("%s was not caught!\n", cfg.catch)
 	}
 
 	return nil
+}
 
+func inspectHelp(cfg *config) error {
+	if cfg.inspect == "" {
+		return fmt.Errorf("please enter a Pokemon name")
+	}
+
+	pokemon, ok := cfg.pokemons[cfg.inspect]
+	if !ok {
+		return fmt.Errorf("%s has not been caught yet", cfg.inspect)
+	}
+
+	fmt.Printf("Name: %s\n", pokemon.Name)
+	fmt.Printf("Height: %d\n", pokemon.Height)
+	fmt.Printf("Weight: %d\n", pokemon.Weight)
+
+	fmt.Println("Stats:")
+	for _, stat := range pokemon.Stats {
+		fmt.Printf("  -%s: %d\n", stat.Stat.Name, stat.BaseStat)
+	}
+
+	fmt.Println("Types:")
+	for _, pokemonType := range pokemon.Types {
+		fmt.Printf("  - %s\n", pokemonType.Type.Name)
+	}
+
+	return nil
 }
 
 func cleanInput(text string) []string {
@@ -222,6 +262,11 @@ func startRepl(cfg *config) {
 		// catch a pokemon
 		if len(tokens) == 2 && tokens[0] == "catch" {
 			cfg.catch = tokens[1]
+		}
+
+		// inspect a pokemon
+		if len(tokens) == 2 && tokens[0] == "inspect" {
+			cfg.inspect = tokens[1]
 		}
 
 		if err := cmd.callback(cfg); err != nil {
@@ -271,6 +316,10 @@ func main() {
 			name:        "catch",
 			description: "catch pokemon",
 			callback:    catchHelp,
+		}, "inspect": {
+			name:        "inspect",
+			description: "Inspect a caught Pokemon",
+			callback:    inspectHelp,
 		},
 	}
 

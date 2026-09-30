@@ -21,8 +21,31 @@ type PokemonEncounter struct {
 	Pokemon Pokemon `json:"pokemon"`
 }
 
+type PokemonStat struct {
+	BaseStat int  `json:"base_stat"`
+	Stat     Stat `json:"stat"`
+}
+
+type Stat struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
+type PokemonType struct {
+	Type Type `json:"type"`
+}
+
+type Type struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
 type Pokemon struct {
-	Name           string `json:"name"`
-	URL            string `json:"url"`
-	BaseExperience int    `josn:"base_experience"`
+	URL            string        `json:"url"`
+	Name           string        `json:"name"`
+	Height         int           `json:"height"`
+	Weight         int           `json:"weight"`
+	BaseExperience int           `json:"base_experience"`
+	Stats          []PokemonStat `json:"stats"`
+	Types          []PokemonType `json:"types"`
 }
