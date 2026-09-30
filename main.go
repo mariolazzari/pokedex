@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"strings"
@@ -21,6 +22,9 @@ type config struct {
 	commands       map[string]cliCommand
 	locationLimit  int
 	locationOffset int
+	location       string
+	catch          string
+	pokemons       map[string]models.Pokemon
 }
 
 func commandExit(cfg *config) error {
@@ -63,6 +67,26 @@ func getLocations(cfg *config) ([]models.Location, error) {
 	return body.Results, nil
 }
 
+func getLocation(cfg *config) ([]models.PokemonEncounter, error) {
+	url := fmt.Sprintf(
+		"https://pokeapi.co/api/v2/location-area/%s",
+		cfg.location,
+	)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var body models.LocationArea
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+
+	return body.PokemonEncounters, nil
+}
+
 func mapHelp(cfg *config) error {
 	fmt.Println("Show next 20 locations")
 
@@ -76,6 +100,25 @@ func mapHelp(cfg *config) error {
 	}
 
 	cfg.locationOffset += cfg.locationLimit
+
+	return nil
+}
+
+func exploreHelp(cfg *config) error {
+	fmt.Println("Explore location")
+
+	if cfg.locationOffset > 0 {
+		cfg.locationOffset -= cfg.locationLimit
+	}
+
+	pokes, err := getLocation(cfg)
+	if err != nil {
+		return err
+	}
+
+	for _, poke := range pokes {
+		fmt.Println(poke.Pokemon.Name)
+	}
 
 	return nil
 }
@@ -97,6 +140,46 @@ func mapbHelp(cfg *config) error {
 	}
 
 	return nil
+}
+
+func catchHelp(cfg *config) error {
+	if cfg.catch == "" {
+		return fmt.Errorf("Please enter a Pokemon name")
+	}
+
+	fmt.Printf("Throwing a Pokeball at %s...\n", cfg.catch)
+
+	url := fmt.Sprintf(
+		"https://pokeapi.co/api/v2/pokemon/%s",
+		cfg.catch,
+	)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("pokemon %q not found", cfg.catch)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PokeAPI returned status %s", resp.Status)
+	}
+
+	var body models.Pokemon
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return err
+	}
+
+	chance := rand.IntN(1000)
+	if chance > body.BaseExperience {
+		cfg.pokemons[cfg.catch] = body
+	}
+
+	return nil
+
 }
 
 func cleanInput(text string) []string {
@@ -131,6 +214,16 @@ func startRepl(cfg *config) {
 			continue
 		}
 
+		// location name
+		if len(tokens) == 2 && tokens[0] == "explore" {
+			cfg.location = tokens[1]
+		}
+
+		// catch a pokemon
+		if len(tokens) == 2 && tokens[0] == "catch" {
+			cfg.catch = tokens[1]
+		}
+
 		if err := cmd.callback(cfg); err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 		}
@@ -145,6 +238,7 @@ func main() {
 	cfg := &config{
 		locationLimit:  20,
 		locationOffset: 0,
+		pokemons:       make(map[string]models.Pokemon),
 	}
 
 	cfg.commands = map[string]cliCommand{
@@ -167,6 +261,16 @@ func main() {
 			name:        "mapb",
 			description: "display the previous 20 locations",
 			callback:    mapbHelp,
+		},
+		"explore": {
+			name:        "explore",
+			description: "explore location",
+			callback:    exploreHelp,
+		},
+		"catch": {
+			name:        "catch",
+			description: "catch pokemon",
+			callback:    catchHelp,
 		},
 	}
 
