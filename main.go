@@ -222,6 +222,21 @@ func inspectHelp(cfg *config) error {
 	return nil
 }
 
+func pokedexHelp(cfg *config) error {
+
+	if len(cfg.pokemons) == 0 {
+		return fmt.Errorf("No pokemon caught")
+	}
+
+	fmt.Println("Your Pokedex:")
+
+	for p := range cfg.pokemons {
+		fmt.Printf("- %s\n", p)
+	}
+
+	return nil
+}
+
 func cleanInput(text string) []string {
 	tokens := strings.Fields(text)
 
@@ -320,6 +335,10 @@ func main() {
 			name:        "inspect",
 			description: "Inspect a caught Pokemon",
 			callback:    inspectHelp,
+		}, "pokedex": {
+			name:        "pokedex",
+			description: "Caught Pokemons",
+			callback:    pokedexHelp,
 		},
 	}
 
